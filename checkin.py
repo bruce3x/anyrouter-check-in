@@ -44,8 +44,8 @@ def save_balance_hash(balance_hash):
 
 def generate_balance_hash(balances):
 	"""生成余额数据的hash"""
-	# 将包含 quota 和 used 的结构转换为简单的 quota 值用于 hash 计算
-	simple_balances = {k: v['quota'] for k, v in balances.items()} if balances else {}
+	# 将浮点数格式化为固定精度字符串，避免浮点数序列化不稳定问题
+	simple_balances = {k: f'{v["quota"]:.2f}' for k, v in balances.items()} if balances else {}
 	balance_json = json.dumps(simple_balances, sort_keys=True, separators=(',', ':'))
 	return hashlib.sha256(balance_json.encode('utf-8')).hexdigest()[:16]
 
@@ -144,7 +144,7 @@ def get_user_info(client, headers, user_info_url: str):
 					'success': True,
 					'quota': quota,
 					'used_quota': used_quota,
-					'display': f':money: Current balance: ${quota}, Used: ${used_quota}',
+					'display': f'💰 余额: ${quota}，已用: ${used_quota}',
 				}
 		return {'success': False, 'error': f'Failed to get user info: HTTP {response.status_code}'}
 	except Exception as e:
@@ -309,19 +309,19 @@ async def main():
 
 			if should_notify_this_account:
 				account_name = account.get_display_name(i)
-				status = '[SUCCESS]' if success else '[FAIL]'
+				status = '✅' if success else '❌'
 				account_result = f'{status} {account_name}'
 				if user_info and user_info.get('success'):
-					account_result += f'\n{user_info["display"]}'
+					account_result += f'\n   {user_info["display"]}'
 				elif user_info:
-					account_result += f'\n{user_info.get("error", "Unknown error")}'
+					account_result += f'\n   ⚠️ {user_info.get("error", "Unknown error")}'
 				notification_content.append(account_result)
 
 		except Exception as e:
 			account_name = account.get_display_name(i)
 			print(f'[FAILED] {account_name} processing exception: {e}')
 			need_notify = True  # 异常也需要通知
-			notification_content.append(f'[FAIL] {account_name} exception: {str(e)[:50]}...')
+			notification_content.append(f'❌ {account_name}\n   💥 异常: {str(e)[:50]}...')
 
 	# 检查余额变化
 	current_balance_hash = generate_balance_hash(current_balances) if current_balances else None
@@ -346,8 +346,8 @@ async def main():
 			if account_key in current_balances:
 				account_name = account.get_display_name(i)
 				# 只添加成功获取余额的账号，且避免重复添加
-				account_result = f'[BALANCE] {account_name}'
-				account_result += f'\n:money: Current balance: ${current_balances[account_key]["quota"]}, Used: ${current_balances[account_key]["used"]}'
+				account_result = f'📊 {account_name}'
+				account_result += f'💰 余额: ${current_balances[account_key]["quota"]}，已用: ${current_balances[account_key]["used"]}'
 				# 检查是否已经在通知内容中（避免重复）
 				if not any(account_name in item for item in notification_content):
 					notification_content.append(account_result)
@@ -358,25 +358,12 @@ async def main():
 
 	if need_notify and notification_content:
 		# 构建通知内容
-		summary = [
-			'[STATS] Check-in result statistics:',
-			f'[SUCCESS] Success: {success_count}/{total_count}',
-			f'[FAIL] Failed: {total_count - success_count}/{total_count}',
-		]
+		time_info = f'🕐 {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'
 
-		if success_count == total_count:
-			summary.append('[SUCCESS] All accounts check-in successful!')
-		elif success_count > 0:
-			summary.append('[WARN] Some accounts check-in successful')
-		else:
-			summary.append('[ERROR] All accounts check-in failed')
-
-		time_info = f'[TIME] Execution time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'
-
-		notify_content = '\n\n'.join([time_info, '\n'.join(notification_content), '\n'.join(summary)])
+		notify_content = time_info + '\n\n' + '\n\n'.join(notification_content)
 
 		print(notify_content)
-		notify.push_message('AnyRouter Check-in Alert', notify_content, msg_type='text')
+		notify.push_message('AnyRouter 签到提醒', notify_content, msg_type='text')
 		print('[NOTIFY] Notification sent due to failures or balance changes')
 	else:
 		print('[INFO] All accounts successful and no balance changes detected, notification skipped')
