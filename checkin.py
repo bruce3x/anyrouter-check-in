@@ -8,7 +8,7 @@ import hashlib
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 import httpx
 from dotenv import load_dotenv
@@ -20,6 +20,7 @@ from utils.notify import notify
 load_dotenv()
 
 BALANCE_HASH_FILE = 'balance_hash.txt'
+BEIJING_TZ = timezone(timedelta(hours=8))
 
 
 def load_balance_hash():
@@ -266,7 +267,7 @@ async def check_in_account(account: AccountConfig, account_index: int, app_confi
 async def main():
 	"""主函数"""
 	print('[SYSTEM] AnyRouter.top multi-account auto check-in script started (using Playwright)')
-	print(f'[TIME] Execution time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
+	print(f'[TIME] Execution time: {datetime.now(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")}')
 
 	app_config = AppConfig.load_from_env()
 	print(f'[INFO] Loaded {len(app_config.providers)} provider configuration(s)')
@@ -358,7 +359,7 @@ async def main():
 
 	if need_notify and notification_content:
 		# 构建通知内容
-		time_info = f'🕐 {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'
+		time_info = f'🕐 {datetime.now(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")}'
 
 		notify_content = time_info + '\n\n' + '\n\n'.join(notification_content)
 
