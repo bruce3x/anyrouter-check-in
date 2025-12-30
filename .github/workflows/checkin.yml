@@ -62,10 +62,10 @@ jobs:
         uv run playwright install chromium --with-deps
 
     - name: 恢复余额历史缓存
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: balance_hash.txt
-        key: balance-hash-${{ github.sha }}
+        key: balance-hash-dummy
         restore-keys: |
           balance-hash-
 
@@ -95,3 +95,18 @@ jobs:
       run: |
         echo "签到任务执行完成"
         echo "时间: $(Get-Date)"
+
+    - name: 清理旧的余额缓存
+      if: always()
+      run: |
+        gh cache list --json id,key | ConvertFrom-Json | Where-Object { $_.key -like "balance-hash-*" } | ForEach-Object { gh cache delete $_.id }
+      env:
+        GH_TOKEN: ${{ github.token }}
+      continue-on-error: true
+
+    - name: 保存余额历史缓存
+      uses: actions/cache/save@v4
+      if: always()
+      with:
+        path: balance_hash.txt
+        key: balance-hash-${{ github.run_id }}
