@@ -106,17 +106,18 @@ class NotificationKit:
 		with httpx.Client(timeout=30.0) as client:
 			client.post(url, json=data)
 
-	def send_telegram(self, title: str, content: str):
+	def send_telegram(self, title: str, content: str, extra: str = ''):
 		if not self.telegram_bot_token or not self.telegram_chat_id:
 			raise ValueError('Telegram Bot Token or Chat ID not configured')
 
-		message = f'<b>{title}</b>\n\n{content}'
+		# extra 为 Telegram 专属的 HTML 页脚（如登录失效时的重配置链接）
+		message = f'<b>{title}</b>\n\n{content}{extra}'
 		data = {'chat_id': self.telegram_chat_id, 'text': message, 'parse_mode': 'HTML'}
 		url = f'https://api.telegram.org/bot{self.telegram_bot_token}/sendMessage'
 		with httpx.Client(timeout=30.0) as client:
 			client.post(url, json=data)
 
-	def push_message(self, title: str, content: str, msg_type: Literal['text', 'html'] = 'text'):
+	def push_message(self, title: str, content: str, msg_type: Literal['text', 'html'] = 'text', tg_extra: str = ''):
 		notifications = [
 			('Email', lambda: self.send_email(title, content, msg_type)),
 			('PushPlus', lambda: self.send_pushplus(title, content)),
@@ -125,7 +126,7 @@ class NotificationKit:
 			('Feishu', lambda: self.send_feishu(title, content)),
 			('WeChat Work', lambda: self.send_wecom(title, content)),
 			('Gotify', lambda: self.send_gotify(title, content)),
-			('Telegram', lambda: self.send_telegram(title, content)),
+			('Telegram', lambda: self.send_telegram(title, content, tg_extra)),
 		]
 
 		for name, func in notifications:

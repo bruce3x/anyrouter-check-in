@@ -23,6 +23,23 @@ BALANCE_HASH_FILE = 'balance_hash.txt'
 BEIJING_TZ = timezone(timedelta(hours=8))
 
 
+def build_auth_expired_tg_links() -> str:
+	"""登录失效（HTTP 401）时追加到 Telegram 通知的重配置链接（HTML tg link 样式）。
+
+	仓库 Secrets 页从 GitHub Actions 自带的环境变量推导，避免把私人仓库路径硬编码进源码；
+	本地运行（无 GITHUB_REPOSITORY）时自动省略该链接。
+	"""
+	links = [
+		'<a href="https://anyrouter.top/console">登录 AnyRouter</a>',
+		'<a href="https://milly.me/anyrouter-check-in/">配置生成器</a>',
+	]
+	repo = os.getenv('GITHUB_REPOSITORY')
+	if repo:
+		server = os.getenv('GITHUB_SERVER_URL', 'https://github.com')
+		links.append(f'<a href="{server}/{repo}/settings/environments/">更新 Secrets</a>')
+	return '\n\n🔑 登录已失效，请重新配置：\n' + '\n'.join(links)
+
+
 def load_balance_hash():
 	"""加载余额hash"""
 	try:
@@ -147,7 +164,11 @@ def get_user_info(client, headers, user_info_url: str):
 					'used_quota': used_quota,
 					'display': f'💰 余额: ${quota}，已用: ${used_quota}',
 				}
-		return {'success': False, 'error': f'Failed to get user info: HTTP {response.status_code}'}
+		result = {'success': False, 'error': f'Failed to get user info: HTTP {response.status_code}'}
+		if response.status_code == 401:
+			# 401 表示会话 Cookie 已失效，需要重新登录并更新配置
+			result['auth_expired'] = True
+		return result
 	except Exception as e:
 		return {'success': False, 'error': f'Failed to get user info: {str(e)[:50]}...'}
 
@@ -287,6 +308,7 @@ async def main():
 	current_balances = {}
 	need_notify = False  # 是否需要发送通知
 	balance_changed = False  # 余额是否有变化
+	auth_expired = False  # 是否有账号登录失效（HTTP 401）
 
 	for i, account in enumerate(accounts):
 		account_key = f'account_{i + 1}'
@@ -302,6 +324,9 @@ async def main():
 				need_notify = True
 				account_name = account.get_display_name(i)
 				print(f'[NOTIFY] {account_name} failed, will send notification')
+
+			if user_info and user_info.get('auth_expired'):
+				auth_expired = True
 
 			if user_info and user_info.get('success'):
 				current_quota = user_info['quota']
@@ -364,7 +389,8 @@ async def main():
 		notify_content = time_info + '\n\n' + '\n\n'.join(notification_content)
 
 		print(notify_content)
-		notify.push_message('AnyRouter 签到提醒', notify_content, msg_type='text')
+		tg_extra = build_auth_expired_tg_links() if auth_expired else ''
+		notify.push_message('AnyRouter 签到提醒', notify_content, msg_type='text', tg_extra=tg_extra)
 		print('[NOTIFY] Notification sent due to failures or balance changes')
 	else:
 		print('[INFO] All accounts successful and no balance changes detected, notification skipped')
